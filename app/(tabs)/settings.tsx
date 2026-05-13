@@ -13,6 +13,12 @@ import { signOut, updateProfile } from 'firebase/auth';
 import { auth } from '../../services/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { getGoals, saveGoals, Goals } from '../../services/goalService';
+import {
+  getNotifStatus,
+  subscribeToPush,
+  unsubscribeFromPush,
+  NotifStatus,
+} from '../../services/pushService';
 
 const EXERCISE_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
 const SLEEP_OPTIONS = [6, 6.5, 7, 7.5, 8, 8.5, 9];
@@ -28,10 +34,41 @@ export default function SettingsScreen() {
   const [goals, setGoals] = useState<Goals>({ exerciseDaysPerWeek: null, minSleepHours: null });
   const [savingGoals, setSavingGoals] = useState(false);
 
+  const [notifStatus, setNotifStatus] = useState<NotifStatus>('loading');
+  const [togglingNotif, setTogglingNotif] = useState(false);
+
   useEffect(() => {
     if (!user) return;
     getGoals(user.uid).then(setGoals);
+    getNotifStatus().then(setNotifStatus);
   }, [user]);
+
+  const reminderTime = () => {
+    const d = new Date();
+    d.setUTCHours(13, 0, 0, 0);
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  async function handleToggleNotifications() {
+    if (!user || togglingNotif) return;
+    setTogglingNotif(true);
+    try {
+      if (notifStatus === 'on') {
+        await unsubscribeFromPush(user.uid);
+        setNotifStatus('off');
+      } else {
+        const result = await subscribeToPush(user.uid);
+        setNotifStatus(result);
+        if (result === 'denied') {
+          Alert.alert('Notifications blocked', 'Enable notifications in your browser settings, then try again.');
+        }
+      }
+    } catch {
+      Alert.alert('Error', 'Could not update notification settings.');
+    } finally {
+      setTogglingNotif(false);
+    }
+  }
 
   async function handleSaveName() {
     if (!user) return;
@@ -169,6 +206,38 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {notifStatus !== 'unsupported' && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Notifications</Text>
+          <View style={styles.card}>
+            <View style={styles.displayRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowValue}>Daily Reminder</Text>
+                {notifStatus === 'on' && (
+                  <Text style={styles.notifSubtext}>Sends daily at {reminderTime()}</Text>
+                )}
+                {notifStatus === 'denied' && (
+                  <Text style={[styles.notifSubtext, { color: '#FF8FAB' }]}>Blocked in browser settings</Text>
+                )}
+              </View>
+              {notifStatus === 'loading' || togglingNotif ? (
+                <ActivityIndicator size="small" color="#2563EB" />
+              ) : (
+                <TouchableOpacity
+                  onPress={handleToggleNotifications}
+                  disabled={notifStatus === 'denied'}
+                  style={[styles.toggleBtn, notifStatus === 'on' && styles.toggleBtnOn]}
+                >
+                  <Text style={[styles.toggleBtnText, notifStatus === 'on' && styles.toggleBtnTextOn]}>
+                    {notifStatus === 'on' ? 'On' : 'Off'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      )}
+
       <View style={styles.section}>
         <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
           <Text style={styles.signOutText}>Sign Out</Text>
@@ -301,6 +370,28 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: '#fff',
     fontWeight: '600',
+  },
+  notifSubtext: {
+    fontSize: 12,
+    color: '#7BA3C8',
+    marginTop: 2,
+  },
+  toggleBtn: {
+    backgroundColor: '#E8F1FB',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
+  toggleBtnOn: {
+    backgroundColor: '#2563EB',
+  },
+  toggleBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7BA3C8',
+  },
+  toggleBtnTextOn: {
+    color: '#fff',
   },
   signOutBtn: {
     backgroundColor: '#fff',
