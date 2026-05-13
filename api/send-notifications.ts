@@ -11,7 +11,7 @@ if (!admin.apps.length) {
 
 webpush.setVapidDetails(
   'mailto:admin@mindfulme.app',
-  process.env.VAPID_PUBLIC_KEY ?? '',
+  process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY ?? '',
   process.env.VAPID_PRIVATE_KEY ?? ''
 );
 
