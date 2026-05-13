@@ -3,6 +3,7 @@ import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { getRecentEntries, HabitEntry } from '../../services/habitService';
+import { getGoals, Goals } from '../../services/goalService';
 
 type Entry = HabitEntry & { date: string };
 
@@ -11,13 +12,18 @@ const MOOD_EMOJI = ['', '😞', '😕', '😐', '🙂', '😄'];
 export default function InsightsScreen() {
   const { user } = useAuth();
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [goals, setGoals] = useState<Goals>({ exerciseDaysPerWeek: null, minSleepHours: null });
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       if (!user) return;
-      getRecentEntries(user.uid, 30).then(data => {
+      Promise.all([
+        getRecentEntries(user.uid, 30),
+        getGoals(user.uid),
+      ]).then(([data, g]) => {
         setEntries(data);
+        setGoals(g);
         setLoading(false);
       });
     }, [user])
@@ -146,6 +152,53 @@ export default function InsightsScreen() {
             })}
           </View>
           <Text style={styles.chartNote}>10h max reference</Text>
+        </View>
+      )}
+
+      {(goals.exerciseDaysPerWeek != null || goals.minSleepHours != null) && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>This Week's Goals</Text>
+
+          {goals.exerciseDaysPerWeek != null && (() => {
+            const done = entries.slice(0, 7).filter(e => e.exercise === true).length;
+            const target = goals.exerciseDaysPerWeek!;
+            const pct = Math.min(done / target, 1);
+            const met = done >= target;
+            return (
+              <View style={styles.goalRow}>
+                <View style={styles.goalLabelRow}>
+                  <Text style={styles.goalLabel}>🏃 Exercise</Text>
+                  <Text style={[styles.goalCount, met && styles.goalMet]}>
+                    {done}/{target} days {met ? '✓' : ''}
+                  </Text>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${pct * 100}%` as any }, met && styles.progressMet]} />
+                </View>
+              </View>
+            );
+          })()}
+
+          {goals.minSleepHours != null && (() => {
+            const week = entries.slice(0, 7).filter(e => e.sleep != null);
+            const done = week.filter(e => (e.sleep ?? 0) >= goals.minSleepHours!).length;
+            const target = week.length;
+            const pct = target > 0 ? Math.min(done / target, 1) : 0;
+            const met = target > 0 && done === target;
+            return (
+              <View style={styles.goalRow}>
+                <View style={styles.goalLabelRow}>
+                  <Text style={styles.goalLabel}>🌙 Sleep ≥ {goals.minSleepHours}h</Text>
+                  <Text style={[styles.goalCount, met && styles.goalMet]}>
+                    {done}/{target} nights {met ? '✓' : ''}
+                  </Text>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${pct * 100}%` as any }, met && styles.progressMet]} />
+                </View>
+              </View>
+            );
+          })()}
         </View>
       )}
 
@@ -294,6 +347,42 @@ const styles = StyleSheet.create({
     color: '#bbb',
     marginTop: 8,
     textAlign: 'right',
+  },
+  goalRow: {
+    marginBottom: 14,
+  },
+  goalLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  goalLabel: {
+    fontSize: 14,
+    color: '#2D2D3A',
+    fontWeight: '500',
+  },
+  goalCount: {
+    fontSize: 13,
+    color: '#7BA3C8',
+    fontWeight: '500',
+  },
+  goalMet: {
+    color: '#16A34A',
+    fontWeight: '700',
+  },
+  progressTrack: {
+    height: 8,
+    backgroundColor: '#E8F1FB',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#2563EB',
+    borderRadius: 4,
+  },
+  progressMet: {
+    backgroundColor: '#16A34A',
   },
   gratitudeRow: {
     marginBottom: 12,

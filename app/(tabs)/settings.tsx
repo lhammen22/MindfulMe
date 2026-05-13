@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,15 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { signOut, updateProfile } from 'firebase/auth';
 import { auth } from '../../services/firebase';
 import { useAuth } from '../../contexts/AuthContext';
+import { getGoals, saveGoals, Goals } from '../../services/goalService';
+
+const EXERCISE_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
+const SLEEP_OPTIONS = [6, 6.5, 7, 7.5, 8, 8.5, 9];
 
 export default function SettingsScreen() {
   const { user } = useAuth();
@@ -19,6 +24,14 @@ export default function SettingsScreen() {
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [nameInput, setNameInput] = useState(user?.displayName ?? '');
   const [savingName, setSavingName] = useState(false);
+
+  const [goals, setGoals] = useState<Goals>({ exerciseDaysPerWeek: null, minSleepHours: null });
+  const [savingGoals, setSavingGoals] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    getGoals(user.uid).then(setGoals);
+  }, [user]);
 
   async function handleSaveName() {
     if (!user) return;
@@ -40,19 +53,29 @@ export default function SettingsScreen() {
     setEditingName(false);
   }
 
+  async function handleGoalChange(update: Partial<Goals>) {
+    if (!user) return;
+    const updated = { ...goals, ...update };
+    setGoals(updated);
+    setSavingGoals(true);
+    try {
+      await saveGoals(user.uid, updated);
+    } catch {
+      Alert.alert('Error', 'Could not save goal. Try again.');
+    } finally {
+      setSavingGoals(false);
+    }
+  }
+
   async function handleSignOut() {
     Alert.alert('Sign Out', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: () => signOut(auth),
-      },
+      { text: 'Sign Out', style: 'destructive', onPress: () => signOut(auth) },
     ]);
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
       </View>
@@ -102,11 +125,56 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
+        <View style={styles.sectionLabelRow}>
+          <Text style={styles.sectionLabel}>Weekly Goals</Text>
+          {savingGoals && <ActivityIndicator size="small" color="#7BA3C8" style={{ marginBottom: 8 }} />}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.rowLabel}>Exercise — days per week</Text>
+          <View style={styles.chipRow}>
+            {EXERCISE_OPTIONS.map(n => (
+              <TouchableOpacity
+                key={n}
+                style={[styles.chip, goals.exerciseDaysPerWeek === n && styles.chipActive]}
+                onPress={() => handleGoalChange({
+                  exerciseDaysPerWeek: goals.exerciseDaysPerWeek === n ? null : n,
+                })}
+              >
+                <Text style={[styles.chipText, goals.exerciseDaysPerWeek === n && styles.chipTextActive]}>
+                  {n}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={[styles.card, { marginTop: 10 }]}>
+          <Text style={styles.rowLabel}>Sleep — minimum hours per night</Text>
+          <View style={styles.chipRow}>
+            {SLEEP_OPTIONS.map(n => (
+              <TouchableOpacity
+                key={n}
+                style={[styles.chip, goals.minSleepHours === n && styles.chipActive]}
+                onPress={() => handleGoalChange({
+                  minSleepHours: goals.minSleepHours === n ? null : n,
+                })}
+              >
+                <Text style={[styles.chipText, goals.minSleepHours === n && styles.chipTextActive]}>
+                  {n}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
         <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -128,6 +196,11 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 16,
     paddingHorizontal: 16,
+  },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   sectionLabel: {
     fontSize: 12,
@@ -154,7 +227,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: 6,
+    marginBottom: 10,
   },
   rowValue: {
     fontSize: 15,
@@ -205,6 +278,29 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     color: '#7BA3C8',
     fontSize: 14,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    backgroundColor: '#E8F1FB',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  chipActive: {
+    backgroundColor: '#2563EB',
+  },
+  chipText: {
+    fontSize: 14,
+    color: '#2D2D3A',
+    fontWeight: '500',
+  },
+  chipTextActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
   signOutBtn: {
     backgroundColor: '#fff',
